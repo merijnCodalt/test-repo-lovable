@@ -1,0 +1,85 @@
+name: Build widget and deploy to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm install
+
+      # Build the Web Component bundle (you'll add this script)
+      - name: Build widget bundle
+        run: npm run build:widget
+        env:
+          VITE_WIDGET_TAG: lovable-${{ github.repository_id }}
+          
+      # Prepare a Pages folder with widget.js at the root
+      - name: Prepare Pages output
+        run: |
+          rm -rf pages
+          mkdir -p pages
+
+          # ✅ CHANGE THIS LINE to wherever your widget build outputs the JS bundle:
+          # Example if output is dist/widget.js:
+          cp dist/widget.js pages/widget.js
+
+          # Optional: simple landing page for debugging
+          cat > pages/index.html << 'EOF'
+          <!doctype html>
+          <html>
+            <head><meta charset="utf-8"><title>Widget is live</title></head>
+            <body>
+              <h1>Widget is live</h1>
+              <p>Widget naam: <code id="tag">...</code></p>
+              <p>Widget script: <code>/widget.js</code></p>
+          
+              <script src="./widget.js"></script>
+              <script>
+                document.getElementById('tag').textContent =
+                  window.__LOVABLE_WIDGET_TAG__ || '(onbekend)';
+              </script>
+            </body>
+          </html>
+          EOF
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "./pages"
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
